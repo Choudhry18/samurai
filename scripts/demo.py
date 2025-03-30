@@ -6,7 +6,6 @@ import cv2
 import torch
 import gc
 import sys
-sys.path.append("./sam2")
 from samurai.sam2.build_sam import build_sam2_video_predictor
 
 color = [(255, 0, 0)]
@@ -115,7 +114,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--video_path", required=True, help="Input video path or directory of frames.")
     parser.add_argument("--txt_path", required=True, help="Path to ground truth text file.")
-    parser.add_argument("--model_path", default="sam2/checkpoints/sam2.1_hiera_base_plus.pt", help="Path to the model checkpoint.")
+    parser.add_argument("--model_path", default="/Users/choudhry347/Desktop/Projects/samurai/samurai/checkpoints/sam2.1_hiera_base_plus.pt", help="Path to the model checkpoint.")
     parser.add_argument("--video_output_path", default="demo.mp4", help="Path to save the output video.")
     parser.add_argument("--save_to_video", default=True, help="Save results to a video.")
     args = parser.parse_args()
