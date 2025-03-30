@@ -164,3 +164,7 @@ visualization/*
 
 # For Testing
 demo/
+
+*.pt
+
+*.mp4

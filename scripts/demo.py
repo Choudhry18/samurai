@@ -7,7 +7,7 @@ import torch
 import gc
 import sys
 sys.path.append("./sam2")
-from sam2.build_sam import build_sam2_video_predictor
+from samurai.sam2.build_sam import build_sam2_video_predictor
 
 color = [(255, 0, 0)]
 
@@ -25,7 +25,7 @@ def determine_model_cfg(model_path):
     if "large" in model_path:
         return "configs/samurai/sam2.1_hiera_l.yaml"
     elif "base_plus" in model_path:
-        return "configs/samurai/sam2.1_hiera_b+.yaml"
+        return "sam2/configs/samurai/sam2.1_hiera_b+.yaml"
     elif "small" in model_path:
         return "configs/samurai/sam2.1_hiera_s.yaml"
     elif "tiny" in model_path:
