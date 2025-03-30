@@ -40,7 +40,7 @@ def prepare_frames_or_path(video_path):
 
 def main(args):
     model_cfg = determine_model_cfg(args.model_path)
-    predictor = build_sam2_video_predictor(model_cfg, args.model_path, device="cuda:0")
+    predictor = build_sam2_video_predictor(model_cfg, args.model_path, device="mps")
     frames_or_path = prepare_frames_or_path(args.video_path)
     prompts = load_txt(args.txt_path)
 
@@ -68,7 +68,7 @@ def main(args):
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     out = cv2.VideoWriter(args.video_output_path, fourcc, frame_rate, (width, height))
 
-    with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
+    with torch.inference_mode(), torch.autocast("mps", dtype=torch.float16):
         state = predictor.init_state(frames_or_path, offload_video_to_cpu=True)
         bbox, track_label = prompts[0]
         _, _, masks = predictor.add_new_points_or_box(state, box=bbox, frame_idx=0, obj_id=0)
