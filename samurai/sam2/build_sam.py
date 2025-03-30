@@ -50,19 +50,19 @@ HF_MODEL_ID_TO_FILENAMES = {
         "sam2_hiera_large.pt",
     ),
     "facebook/sam2.1-hiera-tiny": (
-        "configs/sam2.1/sam2.1_hiera_t.yaml",
+        "sam2/configs/sam2.1/sam2.1_hiera_t.yaml",
         "sam2.1_hiera_tiny.pt",
     ),
     "facebook/sam2.1-hiera-small": (
-        "configs/sam2.1/sam2.1_hiera_s.yaml",
+        "sam2/configs/sam2.1/sam2.1_hiera_s.yaml",
         "sam2.1_hiera_small.pt",
     ),
     "facebook/sam2.1-hiera-base-plus": (
-        "configs/sam2.1/sam2.1_hiera_b+.yaml",
+        "sam2/configs/samurai/sam2.1_hiera_b+.yaml",
         "sam2.1_hiera_base_plus.pt",
     ),
     "facebook/sam2.1-hiera-large": (
-        "configs/sam2.1/sam2.1_hiera_l.yaml",
+        "sam2/configs/sam2.1/sam2.1_hiera_l.yaml",
         "sam2.1_hiera_large.pt",
     ),
 }
@@ -127,6 +127,7 @@ def build_sam2_video_predictor(
     cfg = compose(config_name=config_file, overrides=hydra_overrides)
     OmegaConf.resolve(cfg)
     print(cfg)
+    print(ckpt_path)
     model = instantiate(cfg.model, _recursive_=True)
     _load_checkpoint(model, ckpt_path)
     model = model.to(device)

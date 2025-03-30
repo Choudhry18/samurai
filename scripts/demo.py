@@ -6,7 +6,7 @@ import cv2
 import torch
 import gc
 import sys
-from samurai.sam2.build_sam import build_sam2_video_predictor
+from samurai.sam2.build_sam import build_sam2_video_predictor_hf
 
 color = [(255, 0, 0)]
 
@@ -40,7 +40,7 @@ def prepare_frames_or_path(video_path):
 
 def main(args):
     model_cfg = determine_model_cfg(args.model_path)
-    predictor = build_sam2_video_predictor(model_cfg, args.model_path, device="cuda:0")
+    predictor = build_sam2_video_predictor_hf("facebook/sam2.1-hiera-base-plus", device="mps")
     frames_or_path = prepare_frames_or_path(args.video_path)
     prompts = load_txt(args.txt_path)
 
@@ -68,7 +68,7 @@ def main(args):
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     out = cv2.VideoWriter(args.video_output_path, fourcc, frame_rate, (width, height))
 
-    with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
+    with torch.inference_mode(), torch.autocast("mps", dtype=torch.float16):
         state = predictor.init_state(frames_or_path, offload_video_to_cpu=True)
         bbox, track_label = prompts[0]
         _, _, masks = predictor.add_new_points_or_box(state, box=bbox, frame_idx=0, obj_id=0)
@@ -114,7 +114,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--video_path", required=True, help="Input video path or directory of frames.")
     parser.add_argument("--txt_path", required=True, help="Path to ground truth text file.")
-    parser.add_argument("--model_path", default="/Users/choudhry347/Desktop/Projects/samurai/samurai/checkpoints/sam2.1_hiera_base_plus.pt", help="Path to the model checkpoint.")
+    parser.add_argument("--model_path", default="samurai/checkpoints/sam2.1_hiera_base_plus.pt", help="Path to the model checkpoint.")
     parser.add_argument("--video_output_path", default="demo.mp4", help="Path to save the output video.")
     parser.add_argument("--save_to_video", default=True, help="Save results to a video.")
     args = parser.parse_args()
