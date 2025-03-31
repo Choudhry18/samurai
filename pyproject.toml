@@ -4,3 +4,21 @@ requires = [
     "torch>=2.3.1",
     ]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "samurai"
+version = "0.1.0"
+description = "SAM for zero-shot visual tracking with Motion-Aware Memory"
+requires-python = ">=3.10"
+readme = "README.md"  # Add this line
+dependencies = [
+    "torch>=2.3.1",
+    "numpy",
+    "opencv-python",
+    "hydra-core>=1.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]

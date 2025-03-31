@@ -50,19 +50,19 @@ HF_MODEL_ID_TO_FILENAMES = {
         "sam2_hiera_large.pt",
     ),
     "facebook/sam2.1-hiera-tiny": (
-        "sam2/configs/sam2.1/sam2.1_hiera_t.yaml",
+        "sam2/configs/samurai/sam2.1_hiera_t.yaml",
         "sam2.1_hiera_tiny.pt",
     ),
     "facebook/sam2.1-hiera-small": (
-        "sam2/configs/sam2.1/sam2.1_hiera_s.yaml",
+        "sam2/configs/samurai/sam2.1_hiera_s.yaml",
         "sam2.1_hiera_small.pt",
     ),
     "facebook/sam2.1-hiera-base-plus": (
-        "sam2/configs/samurai/sam2.1_hiera_b+.yaml",
+        "configs/samurai/sam2.1_hiera_b+.yaml",
         "sam2.1_hiera_base_plus.pt",
     ),
     "facebook/sam2.1-hiera-large": (
-        "sam2/configs/sam2.1/sam2.1_hiera_l.yaml",
+        "sam2/configs/samurai/sam2.1_hiera_l.yaml",
         "sam2.1_hiera_large.pt",
     ),
 }
@@ -107,7 +107,7 @@ def build_sam2_video_predictor(
     **kwargs,
 ):
     hydra_overrides = [
-        "++model._target_=samurai.sam2.sam2_video_predictor.SAM2VideoPredictor",
+        "++model._target_=sam2.sam2_video_predictor.SAM2VideoPredictor",
     ]
     if apply_postprocessing:
         hydra_overrides_extra = hydra_overrides_extra.copy()
@@ -126,8 +126,6 @@ def build_sam2_video_predictor(
     # Read config and init model
     cfg = compose(config_name=config_file, overrides=hydra_overrides)
     OmegaConf.resolve(cfg)
-    print(cfg)
-    print(ckpt_path)
     model = instantiate(cfg.model, _recursive_=True)
     _load_checkpoint(model, ckpt_path)
     model = model.to(device)

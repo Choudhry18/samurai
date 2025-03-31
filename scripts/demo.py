@@ -6,7 +6,7 @@ import cv2
 import torch
 import gc
 import sys
-from samurai.sam2.build_sam import build_sam2_video_predictor_hf
+from sam2.build_sam import build_sam2_video_predictor_hf
 
 color = [(255, 0, 0)]
 
