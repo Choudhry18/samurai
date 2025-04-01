@@ -1174,3 +1174,180 @@ class SAM2VideoPredictor(SAM2Base):
             non_cond_frame_outputs.pop(t, None)
             for obj_output_dict in inference_state["output_dict_per_obj"].values():
                 obj_output_dict["non_cond_frame_outputs"].pop(t, None)
+
+
+from sam2.utils.streaming_video_loader import StreamingVideoLoader
+
+def track_streaming_video(predictor, frame_iterator, image_size=1024, device="cuda"):
+    """
+    Process a streaming video with SAMURAI.
+    
+    Args:
+        predictor: SAM2VideoPredictor instance
+        frame_iterator: Iterator yielding video frames as numpy arrays
+        image_size: Size for resizing frames
+        device: Compute device
+    
+    Returns:
+        Generator yielding (frame_idx, object_ids, masks) for each processed frame
+    """
+    # 1. Set up the streaming video loader
+    loader = StreamingVideoLoader(
+        frame_iterator=frame_iterator,
+        image_size=image_size,
+        offload_to_cpu=device=="cpu",
+        chunk_size=30,  # Adjust based on memory constraints
+        temporal_context=4,  # Should match SAMURAI's requirements
+        compute_device=torch.device(device)
+    )
+    
+    # 2. Initialize the state with just the first frame
+    # We'll create a simplified init_state that works with streaming input
+    inference_state = {
+        "device": torch.device(device),
+        "storage_device": torch.device("cpu") if device=="cuda" else torch.device(device),
+        "frames": loader,  # Use the loader instead of pre-loaded frames
+        "video_height": loader.video_height,
+        "video_width": loader.video_width,
+        "num_frames": 1,  # Start with just 1 frame, will increase dynamically
+        "cached_features": {},
+        "point_inputs_per_obj": {},
+        "mask_inputs_per_obj": {},
+        "output_dict_per_obj": {},
+        "temp_output_dict_per_obj": {},
+        "output_dict": {"cond_frame_outputs": {}, "non_cond_frame_outputs": {}},
+        "consolidated_frame_inds": {"cond_frame_outputs": set(), "non_cond_frame_outputs": set()},
+        "frames_already_tracked": set(),
+        "tracking_has_started": False,
+        "obj_id_to_idx": {},
+        "obj_idx_to_id": {},
+        "constants": {"maskmem_pos_enc": None},
+    }
+    
+    # 3. Process frames as they become available
+    processed_frames = 0
+    
+    # Yield the output for each new frame as it's processed
+    while True:
+        try:
+            # Update the number of frames we know about
+            current_frame_count = len(loader)
+            inference_state["num_frames"] = current_frame_count
+            
+            # Process any new frames
+            while processed_frames < current_frame_count:
+                # First frame needs a bbox or points
+                if processed_frames == 0:
+                    # Wait for user to provide bbox for first frame
+                    yield processed_frames, [], None, "NEED_BBOX"
+                    # At this point, caller should have called add_new_points_or_box
+                    
+                    # After user provides bbox, run inference for first frame
+                    _ = predictor.propagate_in_video_preflight(inference_state)
+                    frame_idx = 0
+                    output_dict = inference_state["output_dict"]
+                    
+                    # Get frame data for first frame
+                    feature_data = predictor._get_image_feature(
+                        inference_state, 
+                        frame_idx, 
+                        batch_size=len(inference_state["obj_idx_to_id"])
+                    )
+                    
+                    # Run inference on first frame
+                    current_out, pred_masks = predictor._run_single_frame_inference(
+                        inference_state=inference_state,
+                        output_dict=output_dict,
+                        frame_idx=frame_idx,
+                        batch_size=len(inference_state["obj_idx_to_id"]),
+                        is_init_cond_frame=True,
+                        point_inputs=None,  # We've already provided a bbox
+                        mask_inputs=None,
+                        reverse=False,
+                        run_mem_encoder=True
+                    )
+                    
+                    # Get object IDs
+                    object_ids = [
+                        predictor._obj_idx_to_id(inference_state, obj_idx)
+                        for obj_idx in range(len(inference_state["obj_idx_to_id"]))
+                    ]
+                    
+                    # Get resized masks for output
+                    video_res_masks = predictor._get_orig_video_res_output(
+                        inference_state, 
+                        pred_masks
+                    )
+                    
+                    # Add to tracked frames
+                    inference_state["frames_already_tracked"].add(frame_idx)
+                    processed_frames += 1
+                    
+                    # Yield result for first frame
+                    yield frame_idx, object_ids, video_res_masks
+                
+                else:
+                    # Process subsequent frames
+                    frame_idx = processed_frames
+                    
+                    # Skip if already processed
+                    if frame_idx in inference_state["frames_already_tracked"]:
+                        processed_frames += 1
+                        continue
+                    
+                    # Run inference on this frame
+                    batch_size = len(inference_state["obj_idx_to_id"])
+                    output_dict = inference_state["output_dict"]
+                    
+                    current_out, pred_masks = predictor._run_single_frame_inference(
+                        inference_state=inference_state,
+                        output_dict=output_dict,
+                        frame_idx=frame_idx,
+                        batch_size=batch_size,
+                        is_init_cond_frame=False,
+                        point_inputs=None,
+                        mask_inputs=None,
+                        reverse=False,
+                        run_mem_encoder=True
+                    )
+                    
+                    # Add output to per-object storage
+                    predictor._add_output_per_object(
+                        inference_state, 
+                        frame_idx, 
+                        current_out, 
+                        "non_cond_frame_outputs"
+                    )
+                    
+                    # Get object IDs
+                    object_ids = [
+                        predictor._obj_idx_to_id(inference_state, obj_idx)
+                        for obj_idx in range(batch_size)
+                    ]
+                    
+                    # Get resized masks
+                    video_res_masks = predictor._get_orig_video_res_output(
+                        inference_state, 
+                        pred_masks
+                    )
+                    
+                    # Mark as processed
+                    inference_state["frames_already_tracked"].add(frame_idx)
+                    processed_frames += 1
+                    
+                    # Yield result
+                    yield frame_idx, object_ids, video_res_masks
+            
+            # If we've reached the end of the stream, exit
+            if loader.end_of_stream:
+                break
+                
+            # Wait briefly for new frames
+            import time
+            time.sleep(0.01)
+            
+        except IndexError:
+            # This happens when we try to access frames that aren't ready yet
+            # Wait briefly for new frames
+            import time
+            time.sleep(0.1)
