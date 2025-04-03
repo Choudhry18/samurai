@@ -16,17 +16,6 @@ def frame_generator(video_source):
     return fps
 
 
-def _preprocess_frame(self, frame):
-    """Convert a single frame to the tensor format expected by the model."""
-    # Resize to model's expected input size
-    resized = cv2.resize(frame, (self.image_size, self.image_size))
-    # Convert to RGB (from BGR)
-    rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
-    # Normalize and convert to tensor
-    rgb_norm = rgb.astype(np.float32) / 255.0
-    rgb_norm = (rgb_norm - np.array([0.485, 0.456, 0.406])) / np.array([0.229, 0.224, 0.225])
-    tensor = torch.from_numpy(rgb_norm).permute(2, 0, 1).unsqueeze(0)
-    return tensor.to(self.device)
 def main():
     # 1. Initialize model
     predictor = build_sam2_video_predictor_hf("facebook/sam2.1-hiera-base-plus", device="cuda:0")

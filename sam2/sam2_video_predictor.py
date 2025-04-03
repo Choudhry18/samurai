@@ -13,7 +13,8 @@ from tqdm import tqdm
 
 from sam2.modeling.sam2_base import NO_OBJ_SCORE, SAM2Base
 from sam2.utils.misc import concat_points, fill_holes_in_mask_scores, load_video_frames
-
+import cv2
+import numpy as np
 
 class SAM2VideoPredictor(SAM2Base):
     """The predictor class to handle user interactions and manage inference states."""
@@ -120,7 +121,7 @@ class SAM2VideoPredictor(SAM2Base):
         
         # Setup the inference state with minimal initialization
         inference_state = {}
-        inference_state["images"] = images
+        inference_state["images"] = first_frame_tensor
         inference_state["num_frames"] = 1  # Start with just one frame
         inference_state["frame_buffer"] = images  # Store processed frames
         inference_state["original_frames"] = [first_frame]  # Store original frames
@@ -175,6 +176,21 @@ class SAM2VideoPredictor(SAM2Base):
         self._get_image_feature(inference_state, frame_idx=new_frame_idx, batch_size=1)
         
         return new_frame_idx
+    
+    def _preprocess_frame(self, frame):
+        """Convert a single frame to the tensor format expected by the model."""
+        # Resize to model's expected input size
+        resized = cv2.resize(frame, (self.image_size, self.image_size))
+        # Convert to RGB (from BGR)
+        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+        # Normalize and convert to tensor
+        rgb_norm = rgb.astype(np.float32) / 255.0
+        rgb_norm = (rgb_norm - np.array([0.485, 0.456, 0.406])) / np.array([0.229, 0.224, 0.225])
+        # Create the correct tensor shape [C, H, W]
+        tensor = torch.from_numpy(rgb_norm).permute(2, 0, 1)
+        # Return with batch dimension
+        return tensor.to(self.device)
+        
     def propagate_streaming(self, inference_state, new_frame=None):
         """Propagate tracking to a new frame in streaming mode."""
         # First time setup if tracking hasn't started
