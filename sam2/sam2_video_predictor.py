@@ -210,12 +210,27 @@ class SAM2VideoPredictor(SAM2Base):
             return frame_idx, object_ids, masks
         
         # Process the new frame - same logic as in propagate_in_video
-        object_ids, masks = self._run_single_frame_inference(
-            inference_state, 
+        current_out, pred_masks = self._run_single_frame_inference(
+            inference_state=inference_state, 
+            output_dict=inference_state["output_dict"],  # Pass the main output_dict
             frame_idx=frame_idx,
+            batch_size=1,
+            is_init_cond_frame=False,
             point_inputs=None, 
-            mask_inputs=None
+            mask_inputs=None,
+            reverse=False,
+            run_mem_encoder=True
         )
+        
+        # Consolidate temporary outputs for the current frame
+        is_cond = frame_idx in inference_state["consolidated_frame_inds"]["cond_frame_outputs"]
+        consolidated_out = self._consolidate_temp_output_across_obj(
+            inference_state,
+            frame_idx,
+            is_cond=is_cond,
+            run_mem_encoder=True,  # Ensure memory encoder runs for new frames
+        )
+        inference_state["output_dict"]["non_cond_frame_outputs"][frame_idx] = consolidated_out
         
         # Update tracking metadata
         inference_state["frames_already_tracked"][frame_idx] = "forward"
@@ -224,7 +239,7 @@ class SAM2VideoPredictor(SAM2Base):
         self._manage_frame_buffer(inference_state)
         
         # Get the output in original video resolution
-        object_ids, video_res_masks = self._get_orig_video_res_output(inference_state, frame_idx)
+        object_ids, video_res_masks = self._get_orig_video_res_output(inference_state, pred_masks)
         return frame_idx, object_ids, video_res_masks
 
     def _manage_frame_buffer(self, inference_state, buffer_size=10):
