@@ -22,7 +22,7 @@ def main():
     predictor = build_sam2_video_predictor_hf("facebook/sam2.1-hiera-base-plus", device="cuda:0")
     
     # 2. Setup streaming source
-    video_source = "test_video.mp4"  # Path to video file
+    video_source = "test_trimmed.mp4"  # Path to video file
     if not os.path.exists(video_source):
         print(f"Error: Video file not found at {os.path.abspath(video_source)}")
         return
@@ -43,7 +43,7 @@ def main():
     first_frame = next(frame_gen)
     inference_state = predictor.init_streaming_state(first_frame)
 
-    bbox = (300, 100, 50, 200)  # (x1, y1, x2, y2)
+    bbox = (300, 100, 350, 300)  # (x1, y1, x2, y2)
 
     # Define color for visualization
     color = [(255, 0, 0)]
