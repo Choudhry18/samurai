@@ -121,7 +121,7 @@ class SAM2VideoPredictor(SAM2Base):
         
         # Setup the inference state with minimal initialization
         inference_state = {}
-        inference_state["images"] = first_frame_tensor
+        inference_state["images"] = images
         inference_state["num_frames"] = 1  # Start with just one frame
         inference_state["frame_buffer"] = images  # Store processed frames
         inference_state["original_frames"] = [first_frame]  # Store original frames
@@ -143,6 +143,7 @@ class SAM2VideoPredictor(SAM2Base):
             "cond_frame_outputs": {},
             "non_cond_frame_outputs": {},
         }
+        inference_state["storage_device"] = compute_device
         inference_state["output_dict_per_obj"] = {}
         inference_state["temp_output_dict_per_obj"] = {}
         inference_state["consolidated_frame_inds"] = {
