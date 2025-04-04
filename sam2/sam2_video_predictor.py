@@ -175,7 +175,7 @@ class SAM2VideoPredictor(SAM2Base):
         
         # Process the next frame (optional pre-computation)
         new_frame_idx = inference_state["num_frames"] - 1
-        self._get_image_feature(inference_state, frame_idx=new_frame_idx, batch_size=1)
+        # self._get_image_feature(inference_state, frame_idx=new_frame_idx, batch_size=1)
         
         return new_frame_idx
     
@@ -227,15 +227,18 @@ class SAM2VideoPredictor(SAM2Base):
         )
         
         # Consolidate temporary outputs for the current frame
-        is_cond = frame_idx in inference_state["consolidated_frame_inds"]["cond_frame_outputs"]
-        consolidated_out = self._consolidate_temp_output_across_obj(
-            inference_state,
-            frame_idx,
-            is_cond=is_cond,
-            run_mem_encoder=True,  # Ensure memory encoder runs for new frames
-        )
-        inference_state["output_dict"]["non_cond_frame_outputs"][frame_idx] = consolidated_out
+        # is_cond = frame_idx in inference_state["consolidated_frame_inds"]["cond_frame_outputs"]
+        # consolidated_out = self._consolidate_temp_output_across_obj(
+        #     inference_state,
+        #     frame_idx,
+        #     is_cond=is_cond,
+        #     run_mem_encoder=True,  # Ensure memory encoder runs for new frames
+        # )
+        # inference_state["output_dict"]["non_cond_frame_outputs"][frame_idx] = consolidated_out
         
+        self._add_output_per_object(
+            inference_state, frame_idx, current_out, "cond_frame_outputs"
+        )
         # Update tracking metadata
         inference_state["frames_already_tracked"][frame_idx] = "forward"
         

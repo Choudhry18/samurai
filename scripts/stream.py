@@ -54,7 +54,6 @@ def main():
     
     # Create a list to store frames so we can access previous frames
     frame_idx = 0
-    mask_check = True
 
     with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
         while True:
@@ -86,10 +85,6 @@ def main():
                     mask_to_vis[obj_id] = mask_binary  # Store mask for visualization
 
                 for obj_id, mask in mask_to_vis.items():
-                    if mask_check:
-                        print(mask)
-                        mask_check = False
-
                     mask_img = np.zeros((height, width, 3), np.uint8)
                     mask_img[mask] =  color
                     img = cv2.addWeighted(output_frame, 1, mask_img, 0.2, 0)
