@@ -160,6 +160,7 @@ class SAM2VideoPredictor(SAM2Base):
     
     def add_next_frame(self, inference_state, new_frame):
         """Add a new frame to the state for tracking."""
+        print("add_next_frame")
         # Process the new frame
         new_frame_tensor = self._preprocess_frame(new_frame)
         
@@ -179,6 +180,7 @@ class SAM2VideoPredictor(SAM2Base):
     
     def _preprocess_frame(self, frame):
         """Convert a single frame to the tensor format expected by the model."""
+        print("_preprocess_frame")
         # Resize to model's expected input size
         resized = cv2.resize(frame, (self.image_size, self.image_size))
         # Convert to RGB (from BGR)
@@ -193,6 +195,7 @@ class SAM2VideoPredictor(SAM2Base):
         
     def propagate_streaming(self, inference_state, new_frame=None):
         """Propagate tracking to a new frame in streaming mode."""
+        print("propagate_streaming")
         # First time setup if tracking hasn't started
         if not inference_state["tracking_has_started"]:
             self.propagate_in_video_preflight(inference_state)
@@ -236,7 +239,7 @@ class SAM2VideoPredictor(SAM2Base):
         inference_state["frames_already_tracked"][frame_idx] = "forward"
         
         # Clean up memory by removing old frames beyond a buffer size
-        self._manage_frame_buffer(inference_state)
+        # self._manage_frame_buffer(inference_state)
         
         # Get the output in original video resolution
         object_ids, video_res_masks = self._get_orig_video_res_output(inference_state, pred_masks)
@@ -244,6 +247,7 @@ class SAM2VideoPredictor(SAM2Base):
 
     def _manage_frame_buffer(self, inference_state, buffer_size=10):
         """Remove old frames to manage memory in streaming mode."""
+        print("_manage_frame_buffer")
         current_idx = inference_state["current_frame_idx"]
         if current_idx > buffer_size:
             # Keep only recent frames in memory
@@ -281,7 +285,7 @@ class SAM2VideoPredictor(SAM2Base):
 
     def _obj_id_to_idx(self, inference_state, obj_id):
         """Map client-side object id to model-side object index."""
-        print(("obj_id_to_idx",))
+        print("obj_id_to_idx")
         obj_idx = inference_state["obj_id_to_idx"].get(obj_id, None)
         if obj_idx is not None:
             return obj_idx
