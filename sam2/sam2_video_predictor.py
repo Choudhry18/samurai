@@ -225,6 +225,8 @@ class SAM2VideoPredictor(SAM2Base):
             reverse=False,
             run_mem_encoder=True
         )
+
+        inference_state["output_dict"]["non_cond_frame_outputs"][frame_idx] = current_out
         
         # Consolidate temporary outputs for the current frame
         # is_cond = frame_idx in inference_state["consolidated_frame_inds"]["cond_frame_outputs"]
@@ -237,7 +239,7 @@ class SAM2VideoPredictor(SAM2Base):
         # inference_state["output_dict"]["non_cond_frame_outputs"][frame_idx] = consolidated_out
         
         self._add_output_per_object(
-            inference_state, frame_idx, current_out, "cond_frame_outputs"
+            inference_state, frame_idx, current_out, "non_cond_frame_outputs"
         )
         # Update tracking metadata
         inference_state["frames_already_tracked"][frame_idx] = "forward"
