@@ -22,7 +22,7 @@ def main():
     predictor = build_sam2_video_predictor_hf("facebook/sam2.1-hiera-base-plus", device="cuda:0")
     
     # 2. Setup streaming source
-    video_source = "test_trimmed.mp4"  # Path to video file
+    video_source = "https://filesamples.com/samples/video/mp4/sample_640x360.mp4"  # Path to video file
     if not os.path.exists(video_source):
         print(f"Error: Video file not found at {os.path.abspath(video_source)}")
         return
@@ -43,17 +43,13 @@ def main():
     first_frame = next(frame_gen)
     inference_state = predictor.init_streaming_state(first_frame)
 
-    bbox = (300, 100, 350, 300)  # (x1, y1, x2, y2)
+    bbox = (300, 200, 350, 400)  # (x1, y1, x2, y2)
 
     # Define color for visualization
     color = [(255, 0, 0)]
 
     
     predictor.add_new_points_or_box(inference_state, box=bbox, frame_idx=0, obj_id=0)
-
-    
-    # Create a list to store frames so we can access previous frames
-    frame_idx = 0
 
     with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
         while True:
@@ -69,7 +65,7 @@ def main():
                 bbox_to_vis = {}
 
                 # Visualize the masks
-                for obj_id, mask in zip(object_ids, masks):  # masks[1] has the video_res_masks
+                for obj_id, mask in zip(object_ids, masks):  
                     mask_binary = mask[0].cpu().numpy() > 0
                     
                     # Create a colored mask overlay
@@ -92,26 +88,8 @@ def main():
                 for obj_id, bbox in bbox_to_vis.items():
                     cv2.rectangle(img, (bbox[0], bbox[1]), (bbox[0] + bbox[2], bbox[1] + bbox[3]), 255, 2)
                     
-                    # mask_overlay = np.zeros_like(output_frame)
-                    # mask_overlay[mask_binary] = [0, 0, 255]  # Red color for the mask
-                    
-                    # # Blend the mask with the original frame
-                    # output_frame = cv2.addWeighted(output_frame, 1.0, mask_overlay, 0.5, 0)
                 out.write(img)
                     
-                # Draw the bounding box if we have one and this is frame 0
-                # if frame_idx == 0 and bbox is not None:
-                #     cv2.rectangle(
-                #         output_frame, 
-                #         (bbox[0], bbox[1]), 
-                #         (bbox[2], bbox[3]), 
-                #         (0, 255, 0), 
-                #         2
-                #     )
-                
-                # Display the frame and save to video
-                # cv2.imshow("SAMURAI Tracking", output_frame)
-                # out.write(output_frame)
                 
                 # Exit on 'q' press
                 if cv2.waitKey(1) & 0xFF == ord('q'):

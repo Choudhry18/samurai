@@ -194,18 +194,15 @@ class SAM2VideoPredictor(SAM2Base):
         # Return with batch dimension
         return tensor.to(self.device)
         
-    def propagate_streaming(self, inference_state, new_frame=None):
+    def propagate_streaming(self, inference_state, new_frame):
         """Propagate tracking to a new frame in streaming mode."""
         print("propagate_streaming")
         # First time setup if tracking hasn't started
         if not inference_state["tracking_has_started"]:
             self.propagate_in_video_preflight(inference_state)
         
-        # Add the new frame if provided
-        if new_frame is not None:
-            frame_idx = self.add_next_frame(inference_state, new_frame)
-        else:
-            frame_idx = inference_state["current_frame_idx"]
+
+        frame_idx = self.add_next_frame(inference_state, new_frame)
         
         # Skip if we've already processed this frame
         if frame_idx in inference_state["frames_already_tracked"]:
@@ -228,15 +225,6 @@ class SAM2VideoPredictor(SAM2Base):
 
         inference_state["output_dict"]["non_cond_frame_outputs"][frame_idx] = current_out
         
-        # Consolidate temporary outputs for the current frame
-        # is_cond = frame_idx in inference_state["consolidated_frame_inds"]["cond_frame_outputs"]
-        # consolidated_out = self._consolidate_temp_output_across_obj(
-        #     inference_state,
-        #     frame_idx,
-        #     is_cond=is_cond,
-        #     run_mem_encoder=True,  # Ensure memory encoder runs for new frames
-        # )
-        # inference_state["output_dict"]["non_cond_frame_outputs"][frame_idx] = consolidated_out
         
         self._add_output_per_object(
             inference_state, frame_idx, current_out, "non_cond_frame_outputs"
