@@ -112,7 +112,7 @@ class SAM2VideoPredictor(SAM2Base):
         return inference_state
     
     @torch.inference_mode()
-    def init_streaming_state(self, first_frame, offload_state_to_cpu=False):
+    def init_streaming_state(self, first_frame, offload_state_to_cpu=False, offload_video_to_cpu=False):
         """Initialize state with just the first frame, preparing for streaming."""
         compute_device = self.device
         # Process the first frame and create a single-element list
@@ -125,7 +125,7 @@ class SAM2VideoPredictor(SAM2Base):
         inference_state["num_frames"] = 1  # Start with just one frame
         inference_state["frame_buffer"] = images  # Store processed frames
         inference_state["original_frames"] = [first_frame]  # Store original frames
-        inference_state["offload_video_to_cpu"] = True  # Always offload in streaming
+        inference_state["offload_video_to_cpu"] = offload_video_to_cpu  # Always offload in streaming
         inference_state["offload_state_to_cpu"] = offload_state_to_cpu
         inference_state["video_height"], inference_state["video_width"] = first_frame.shape[:2]
         inference_state["device"] = compute_device
@@ -232,34 +232,10 @@ class SAM2VideoPredictor(SAM2Base):
         # Update tracking metadata
         inference_state["frames_already_tracked"][frame_idx] = "forward"
         
-        # Clean up memory by removing old frames beyond a buffer size
-        # self._manage_frame_buffer(inference_state)
-        
         # Get the output in original video resolution
         object_ids, video_res_masks = self._get_orig_video_res_output(inference_state, pred_masks)
         return frame_idx, object_ids, video_res_masks
 
-    def _manage_frame_buffer(self, inference_state, buffer_size=10):
-        """Remove old frames to manage memory in streaming mode."""
-        print("_manage_frame_buffer")
-        current_idx = inference_state["current_frame_idx"]
-        if current_idx > buffer_size:
-            # Keep only recent frames in memory
-            cutoff = current_idx - buffer_size
-            keys_to_remove = []
-            
-            # Clean cached features for old frames
-            for key in inference_state["cached_features"]:
-                if isinstance(key, tuple) and key[0] < cutoff:
-                    keys_to_remove.append(key)
-            for key in keys_to_remove:
-                del inference_state["cached_features"][key]
-                
-            # Clean consolidated outputs for old frames
-            # (Keep conditioning frames that might still be needed)
-            for key in list(inference_state["output_dict"]["non_cond_frame_outputs"].keys()):
-                if key < cutoff and key not in inference_state["consolidated_frame_inds"]["cond_frame_outputs"]:
-                    del inference_state["output_dict"]["non_cond_frame_outputs"][key]
     @classmethod
     def from_pretrained(cls, model_id: str, **kwargs) -> "SAM2VideoPredictor":
         """
@@ -1343,3 +1319,48 @@ class SAM2VideoPredictor(SAM2Base):
             for obj_output_dict in inference_state["output_dict_per_obj"].values():
                 obj_output_dict["non_cond_frame_outputs"].pop(t, None)
 
+
+    def _release_old_frames(self, inference_state, frame_idx, max_inference_state_frames, pre_frames, release_images=True):
+        '''
+        Clear frames that will no longer be used for inference—typically, max_inference_state_frames is larger than the propagation length.
+        :param
+        inference_state: The inference memory store
+        frame_idx: The current frame index
+        max_inference_state_frames: The maximum number of frames to keep
+        pre_frames: The number of pre-loaded frames; must ensure these aren’t removed. (pre_frames-1) is the maximum index for the pre-loaded frames
+        '''
+
+        oldest_allowed_idx = frame_idx - max_inference_state_frames
+
+        # Get all the frame indices stored in inference_state['output_dict'].
+        all_cond_frames_idx = inference_state['output_dict']['cond_frame_outputs'].keys()
+        all_non_cond_frames_idx = inference_state['output_dict']['non_cond_frame_outputs'].keys()
+        old_cond_frames_idx = [idx for idx in all_cond_frames_idx if (pre_frames - 1) < idx <= oldest_allowed_idx] 
+        old_non_cond_frames_idx = [idx for idx in all_non_cond_frames_idx if (pre_frames - 1) < idx <= oldest_allowed_idx] 
+
+        for old_idx in old_non_cond_frames_idx:
+            inference_state['output_dict']['non_cond_frame_outputs'].pop(old_idx,None)
+            for obj in inference_state['output_dict_per_obj'].keys():
+                inference_state['output_dict_per_obj'][obj]['non_cond_frame_outputs'].pop(old_idx,None)
+
+        for old_idx in old_cond_frames_idx:
+            inference_state['output_dict']['cond_frame_outputs'].pop(old_idx,None)
+            inference_state['consolidated_frame_inds']['cond_frame_outputs'].discard(old_idx)
+            for obj in inference_state['output_dict_per_obj'].keys():
+                inference_state['output_dict_per_obj'][obj]['cond_frame_outputs'].pop(old_idx,None)
+
+        if release_images: 
+            old_image_indices = [idx for idx in inference_state["images_idx"] if (pre_frames - 1) < idx <= oldest_allowed_idx]
+            image_idx_to_remove = []
+            for old_idx in old_image_indices:
+                old_image_idx = inference_state["images_idx"].index(old_idx)  
+                image_idx_to_remove.append(old_image_idx)
+
+            mask = torch.tensor([i for i in range(inference_state["images"].size(0)) if i not in image_idx_to_remove])
+            inference_state["images"] = torch.index_select(inference_state["images"], dim=0, index=mask)
+            inference_state["images_idx"] = [idx for idx in inference_state["images_idx"] if idx not in old_image_indices]
+
+
+            assert len(inference_state["images"]) == len(inference_state["images_idx"])  
+
+        # gc.collect()

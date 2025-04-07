@@ -3,6 +3,7 @@ from sam2.build_sam import build_sam2_video_predictor_hf
 import numpy as np
 import os
 import torch
+import gc
 
 def frame_generator(video_source):
     """Generate frames from a video source."""
@@ -15,7 +16,6 @@ def frame_generator(video_source):
         yield frame
     cap.release()
     return fps
-
 
 def main():
     # 1. Initialize model
@@ -41,15 +41,17 @@ def main():
     out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
     
     first_frame = next(frame_gen)
-    inference_state = predictor.init_streaming_state(first_frame)
+        
+    with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
+        inference_state = predictor.init_streaming_state(first_frame)
 
-    bbox = (300, 200, 350, 400)  # (x1, y1, x2, y2)
+    bbox = (320, 600, 370, 750)  # (x1, y1, x2, y2)
 
     # Define color for visualization
     color = [(255, 0, 0)]
 
-    
-    predictor.add_new_points_or_box(inference_state, box=bbox, frame_idx=0, obj_id=0)
+    with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
+        predictor.add_new_points_or_box(inference_state, box=bbox, frame_idx=0, obj_id=0)
 
     with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
         while True:
@@ -101,7 +103,10 @@ def main():
     # Release resources
     out.release()
     cv2.destroyAllWindows()
-    
+    del predictor, inference_state
+    gc.collect()
+    torch.clear_autocast_cache()
+    torch.cuda.empty_cache()
     print(f"Video saved to {os.path.abspath(output_path)}")
 
 if __name__ == "__main__":
