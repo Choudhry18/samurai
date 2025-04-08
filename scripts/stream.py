@@ -6,6 +6,17 @@ import torch
 import gc
 import argparse
 
+def get_gpu_memory_usage():
+    """Get the current GPU memory usage in MB."""
+    if torch.cuda.is_available():
+        return torch.cuda.memory_allocated() / 1024 / 1024, torch.cuda.memory_reserved() / 1024 / 1024
+    return 0, 0
+
+def log_memory(tag=""):
+    """Log memory usage with an optional tag."""
+    allocated, reserved = get_gpu_memory_usage()
+    print(f"[{tag}] GPU Memory: {allocated:.2f}MB allocated, {reserved:.2f}MB reserved")
+
 def frame_generator(video_source):
     """Generate frames from a video source."""
     cap = cv2.VideoCapture(video_source)
@@ -22,14 +33,16 @@ def main(args):
     # Determine video source
     if args.video:
         video_source = args.video
-        # if not os.path.exists(video_source):
-        #     print(f"Error: Video file not found at {os.path.abspath(video_source)}")
-        #     return
+        if not os.path.exists(video_source):
+            print(f"Error: Video file not found at {os.path.abspath(video_source)}")
+            return
     else:
         video_source = args.camera
 
     # Initialize model
+    log_memory("Before model load")
     predictor = build_sam2_video_predictor_hf("facebook/sam2.1-hiera-base-plus", device="cuda:0")
+    log_memory("After model load")
     
     # Setup streaming source
     frame_gen = frame_generator(video_source)
@@ -51,7 +64,7 @@ def main(args):
     with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
         inference_state = predictor.init_streaming_state(first_frame)
 
-    bbox = (420, 600, 470, 750)  # (x1, y1, x2, y2)
+    bbox = (250, 50, 420, 320)  # (x1, y1, x2, y2)
 
     # Define color for visualization
     color = [(255, 0, 0)]
@@ -70,6 +83,8 @@ def main(args):
                 mask_to_vis = {}
                 bbox_to_vis = {}
 
+                if frame_idx % 10 == 0:
+                    log_memory(f"Before propagate_streaming frame {frame_idx}")
                 # Visualize the masks
                 for obj_id, mask in zip(object_ids, masks):  
                     mask_binary = mask[0].cpu().numpy() > 0

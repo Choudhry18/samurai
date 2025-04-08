@@ -664,7 +664,7 @@ class SAM2Base(torch.nn.Module):
             if self.samurai_mode:
                 valid_indices = [] 
                 if frame_idx > 1:  # Ensure we have previous frames to evaluate
-                    for i in non_cond_outputs.keys()[::-1]:  # Iterate backwards through previous frames
+                    for i in list(non_cond_outputs.keys())[::-1]:  # Iterate backwards through previous frames
                         iou_score = non_cond_outputs[i]["best_iou_score"]  # Get mask affinity score
                         obj_score = non_cond_outputs[i]["object_score_logits"]  # Get object score
                         kf_score = non_cond_outputs[i]["kf_score"] if "kf_score" in non_cond_outputs[i] else None  # Get motion score if available

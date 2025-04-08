@@ -160,7 +160,7 @@ class SAM2VideoPredictor(SAM2Base):
     
     def add_next_frame(self, inference_state, new_frame):
         """Add a new frame to the state for tracking."""
-        print("add_next_frame")
+        
         # Process the new frame
         new_frame_tensor = self._preprocess_frame(new_frame)
         
@@ -179,7 +179,7 @@ class SAM2VideoPredictor(SAM2Base):
     
     def _preprocess_frame(self, frame):
         """Convert a single frame to the tensor format expected by the model."""
-        print("_preprocess_frame")
+        
         # Resize to model's expected input size
         resized = cv2.resize(frame, (self.image_size, self.image_size))
         # Convert to RGB (from BGR)
@@ -194,13 +194,12 @@ class SAM2VideoPredictor(SAM2Base):
         
     def propagate_streaming(self, inference_state, new_frame):
         """Propagate tracking to a new frame in streaming mode."""
-        print("propagate_streaming")
+        
         # First time setup if tracking hasn't started
         if not inference_state["tracking_has_started"]:
             self.propagate_in_video_preflight(inference_state)
         
         frame_idx = self.add_next_frame(inference_state, new_frame)
-        self._release_old_frames(inference_state, frame_idx)
 
         # Skip if we've already processed this frame
         # if frame_idx in inference_state["frames_already_tracked"]:
@@ -224,16 +223,17 @@ class SAM2VideoPredictor(SAM2Base):
 
         inference_state["output_dict"]["non_cond_frame_outputs"][frame_idx] = current_out
         
-        
-        self._add_output_per_object(
-            inference_state, frame_idx, current_out, "non_cond_frame_outputs"
-        )
+        # taking this out as it is not relevant when not adding points during stream, however migth not to fix in future 
+        # self._add_output_per_object(
+        #     inference_state, frame_idx, current_out, "non_cond_frame_outputs"
+        # )
         # Update tracking metadata
         inference_state["frames_already_tracked"][frame_idx] = "forward"
         
         # Get the output in original video resolution
         object_ids, video_res_masks = self._get_orig_video_res_output(inference_state, pred_masks)
-        print(f"frames removed: {self._clear_unused_frames(inference_state, frame_idx)}")
+        if frame_idx % 10 == 0:
+            print(f"frames removed: {self._clear_unused_frames(inference_state, frame_idx)}")
         return frame_idx, object_ids, video_res_masks
 
     @classmethod
@@ -255,7 +255,7 @@ class SAM2VideoPredictor(SAM2Base):
 
     def _obj_id_to_idx(self, inference_state, obj_id):
         """Map client-side object id to model-side object index."""
-        print("obj_id_to_idx")
+        
         obj_idx = inference_state["obj_id_to_idx"].get(obj_id, None)
         if obj_idx is not None:
             return obj_idx
@@ -290,7 +290,7 @@ class SAM2VideoPredictor(SAM2Base):
 
     def _obj_idx_to_id(self, inference_state, obj_idx):
         """Map model-side object index to client-side object id."""
-        print("obj_idx_to_id")
+        
         return inference_state["obj_idx_to_id"][obj_idx]
 
     def _get_obj_num(self, inference_state):
@@ -310,7 +310,7 @@ class SAM2VideoPredictor(SAM2Base):
         box=None,
     ):
         """Add new points to a frame."""
-        print("add_new_points_or_box")
+        
         obj_idx = self._obj_id_to_idx(inference_state, obj_id)
         point_inputs_per_frame = inference_state["point_inputs_per_obj"][obj_idx]
         mask_inputs_per_frame = inference_state["mask_inputs_per_obj"][obj_idx]
@@ -455,7 +455,7 @@ class SAM2VideoPredictor(SAM2Base):
         mask,
     ):
         """Add new mask to a frame."""
-        print("add_new_mask")
+        
         obj_idx = self._obj_id_to_idx(inference_state, obj_id)
         point_inputs_per_frame = inference_state["point_inputs_per_obj"][obj_idx]
         mask_inputs_per_frame = inference_state["mask_inputs_per_obj"][obj_idx]
@@ -536,7 +536,7 @@ class SAM2VideoPredictor(SAM2Base):
         Resize the object scores to the original video resolution (video_res_masks)
         and apply non-overlapping constraints for final output.
         """
-        print("_get_orig_video_res_output")
+        
         device = inference_state["device"]
         video_H = inference_state["video_height"]
         video_W = inference_state["video_width"]
@@ -571,7 +571,7 @@ class SAM2VideoPredictor(SAM2Base):
         2) if specified, rerun memory encoder after apply non-overlapping constraints
            on the object scores.
         """
-        print("_consolidate_temp_output_across_obj")
+        
         batch_size = self._get_obj_num(inference_state)
         storage_key = "cond_frame_outputs" if is_cond else "non_cond_frame_outputs"
         # Optionally, we allow consolidating the temporary outputs at the original
@@ -688,7 +688,7 @@ class SAM2VideoPredictor(SAM2Base):
     def _get_empty_mask_ptr(self, inference_state, frame_idx):
         """Get a dummy object pointer based on an empty mask on the current frame."""
         # A dummy (empty) mask with a single object
-        print("_get_empty_mask_ptr")
+        
         batch_size = 1
         mask_inputs = torch.zeros(
             (batch_size, 1, self.image_size, self.image_size),
@@ -725,7 +725,7 @@ class SAM2VideoPredictor(SAM2Base):
     @torch.inference_mode()
     def propagate_in_video_preflight(self, inference_state):
         """Prepare inference_state and consolidate temporary outputs before tracking."""
-        print("propagate_in_video_preflight")
+        
         # Tracking has started and we don't allow adding new objects until session is reset.
         inference_state["tracking_has_started"] = True
         batch_size = self._get_obj_num(inference_state)
@@ -802,7 +802,7 @@ class SAM2VideoPredictor(SAM2Base):
         reverse=False,
     ):
         """Propagate the input points across frames to track in the entire video."""
-        print("propagate_in_video")
+        
         self.propagate_in_video_preflight(inference_state)
 
         output_dict = inference_state["output_dict"]
@@ -886,7 +886,7 @@ class SAM2VideoPredictor(SAM2Base):
         Split a multi-object output into per-object output slices and add them into
         `output_dict_per_obj`. The resulting slices share the same tensor storage.
         """
-        print("_add_output_per_object")
+        
         maskmem_features = current_out["maskmem_features"]
         assert maskmem_features is None or isinstance(maskmem_features, torch.Tensor)
 
@@ -914,7 +914,7 @@ class SAM2VideoPredictor(SAM2Base):
         self, inference_state, frame_idx, obj_id, need_output=True
     ):
         """Remove all input points or mask in a specific frame for a given object."""
-        print("clear_all_prompts_in_frame")
+        
         obj_idx = self._obj_id_to_idx(inference_state, obj_id)
 
         # Clear the conditioning information on the given frame
@@ -984,7 +984,7 @@ class SAM2VideoPredictor(SAM2Base):
     @torch.inference_mode()
     def reset_state(self, inference_state):
         """Remove all input points or mask in all frames throughout the video."""
-        print("reset_state")
+        
         self._reset_tracking_results(inference_state)
         # Remove all object ids
         inference_state["obj_id_to_idx"].clear()
@@ -1016,7 +1016,7 @@ class SAM2VideoPredictor(SAM2Base):
 
     def _get_image_feature(self, inference_state, frame_idx, batch_size, streaming_mode=False):
         """Compute the image features on a given frame."""
-        print("_get_image_feature")
+        
         # Look up in the cache first
         image, backbone_out = inference_state["cached_features"].get(
             frame_idx, (None, None)
@@ -1066,7 +1066,7 @@ class SAM2VideoPredictor(SAM2Base):
         streaming_mode=False,
     ):
         """Run tracking on a single frame based on current inputs and previous memory."""
-        print("_run_single_frame_inference")
+        
         # Retrieve correct image features
         (
             _,
@@ -1139,7 +1139,7 @@ class SAM2VideoPredictor(SAM2Base):
         non-overlapping constraints to object scores. Since their scores changed, their
         memory also need to be computed again with the memory encoder.
         """
-        print("_run_memory_encoder")
+        
         # Retrieve correct image features
         _, _, current_vision_feats, _, feat_sizes = self._get_image_feature(
             inference_state, frame_idx, batch_size
@@ -1167,7 +1167,7 @@ class SAM2VideoPredictor(SAM2Base):
         `maskmem_pos_enc` is the same across frames and objects, so we cache it as
         a constant in the inference session to reduce session storage size.
         """
-        print("_get_maskmem_pos_enc")
+        
         model_constants = inference_state["constants"]
         # "out_maskmem_pos_enc" should be either a list of tensors or None
         out_maskmem_pos_enc = current_out["maskmem_pos_enc"]
@@ -1194,7 +1194,7 @@ class SAM2VideoPredictor(SAM2Base):
         Remove an object id from the tracking state. If strict is True, we check whether
         the object id actually exists and raise an error if it doesn't exist.
         """
-        print("remove_object")
+        
         old_obj_idx_to_rm = inference_state["obj_id_to_idx"].get(obj_id, None)
         updated_frames = []
         # Check whether this object_id to remove actually exists and possibly raise an error.
@@ -1312,7 +1312,7 @@ class SAM2VideoPredictor(SAM2Base):
         This method clears those non-conditioning memories surrounding the interacted
         frame to avoid giving the model both old and new information about the object.
         """
-        print("_clear_non_cond_mem_around_input")
+        
         r = self.memory_temporal_stride_for_eval
         frame_idx_begin = frame_idx - r * self.num_maskmem
         frame_idx_end = frame_idx + r * self.num_maskmem
@@ -1375,7 +1375,7 @@ class SAM2VideoPredictor(SAM2Base):
         
         # Keep high-quality frames
         frames_to_keep.update(quality_frames)
-        print(f"frames to keep: {frames_to_keep}")
+        
         # Step 2: Clear frames that aren't needed
         frames_to_remove = []
         
