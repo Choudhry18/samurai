@@ -233,6 +233,7 @@ class SAM2VideoPredictor(SAM2Base):
         
         # Get the output in original video resolution
         object_ids, video_res_masks = self._get_orig_video_res_output(inference_state, pred_masks)
+        print(f"frames removed {self._clear_old_frames(inference_state, frame_idx)}")
         return frame_idx, object_ids, video_res_masks
 
     @classmethod
@@ -1323,34 +1324,80 @@ class SAM2VideoPredictor(SAM2Base):
                 obj_output_dict["non_cond_frame_outputs"].pop(t, None)
 
 
-    def _release_old_frames(self, inference_state, frame_idx, max_inference_state_frames=8):
-        '''
-        Clear frames that will no longer be used for inference—typically, max_inference_state_frames is larger than the propagation length.
-        :param
-        inference_state: The inference memory store
-        frame_idx: The current frame index
-        max_inference_state_frames: The maximum number of frames to keep
-        pre_frames: The number of pre-loaded frames; must ensure these aren’t removed. (pre_frames-1) is the maximum index for the pre-loaded frames
-        '''
+def _clear_unused_frames(self, output_dict, frame_idx):
+    """
+    Remove frames from output_dict that are no longer needed for future processing.
+    This function specifically targets the Samurai mode, which selectively uses frames
+    based on quality metrics rather than just temporal proximity.
+    
+    Args:
+        output_dict: Dictionary containing frame outputs
+        frame_idx: Current frame index
+        keep_frames_margin: Extra frames to keep beyond what's required (safety margin)
+    """
+    if not self.samurai_mode or frame_idx <= 1:
+        return  # Only apply this optimization in Samurai mode after initial frames
+    
+    # Step 1: Identify which frames we need to keep
+    frames_to_keep = set()
+    
+    # Always keep most recent frames within the margin
+    recent_frames = set(range(max(1, frame_idx - self.max_obj_ptrs_in_encoder), frame_idx + 1))
+    frames_to_keep.update(recent_frames)
+    
+    non_cond_outputs = output_dict["non_cond_frame_outputs"]
+    # Identify high-quality frames based on Samurai criteria
+    non_cond_frames = list(non_cond_outputs.keys())
+    quality_frames = []
+    
+    for i in non_cond_frames:
+        if i >= frame_idx:
+            continue  # Don't process future frames
+            
+        try:
+            frame_data = non_cond_outputs[i]
+            iou_score = frame_data["best_iou_score"]
+            obj_score = frame_data["object_score_logits"]
+            kf_score = frame_data.get("kf_score", None)
+            
+            # Check quality thresholds
+            if (iou_score.item() > self.memory_bank_iou_threshold and 
+                obj_score.item() > self.memory_bank_obj_score_threshold and
+                (kf_score is None or kf_score.item() > self.memory_bank_kf_score_threshold)):
+                quality_frames.append(i)
+                
+            # Stop once we have enough quality frames
+            if len(quality_frames) >= self.max_obj_ptrs_in_encoder - 1:
+                break
+                
+        except (KeyError, AttributeError):
+            continue  # Skip frames with missing data
+    
+    # Keep high-quality frames
+    frames_to_keep.update(quality_frames)
+    
+    # Step 2: Clear frames that aren't needed
+    frames_to_remove = []
+    
+    for i in non_cond_frames:
+        if i < frame_idx - self.num_maskmem and i not in frames_to_keep:
+            frames_to_remove.append(i)
+    
+    # Remove the unused frames
+    for i in frames_to_remove:
+        if i in non_cond_outputs:
+            # Optional: Move to CPU or compress before deletion if memory management is critical
+            # if torch.cuda.is_available():
+            #     output_dict["non_cond_frame_outputs"][i] = {
+            #         k: v.cpu() for k, v in output_dict["non_cond_frame_outputs"][i].items() 
+            #         if isinstance(v, torch.Tensor)
+            #     }
+            del non_cond_outputs[i]
+    
+    # Trigger garbage collection if many frames were removed
 
-        oldest_allowed_idx = frame_idx - max_inference_state_frames
-
-        # Get all the frame indices stored in inference_state['output_dict'].
-        all_cond_frames_idx = inference_state['output_dict']['cond_frame_outputs'].keys()
-        all_non_cond_frames_idx = inference_state['output_dict']['non_cond_frame_outputs'].keys()
-        old_cond_frames_idx = [idx for idx in all_cond_frames_idx if idx <= oldest_allowed_idx] 
-        old_non_cond_frames_idx = [idx for idx in all_non_cond_frames_idx if  idx <= oldest_allowed_idx] 
-
-        for old_idx in old_non_cond_frames_idx:
-            inference_state['output_dict']['non_cond_frame_outputs'].pop(old_idx,None)
-            for obj in inference_state['output_dict_per_obj'].keys():
-                inference_state['output_dict_per_obj'][obj]['non_cond_frame_outputs'].pop(old_idx,None)
-
-        for old_idx in old_cond_frames_idx:
-            inference_state['output_dict']['cond_frame_outputs'].pop(old_idx,None)
-            inference_state['consolidated_frame_inds']['cond_frame_outputs'].discard(old_idx)
-            for obj in inference_state['output_dict_per_obj'].keys():
-                inference_state['output_dict_per_obj'][obj]['cond_frame_outputs'].pop(old_idx,None)
-
-
-        gc.collect()
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    
+    return frames_to_remove  # Return list of removed frames (useful for logging)

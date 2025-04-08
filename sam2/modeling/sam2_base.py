@@ -653,6 +653,7 @@ class SAM2Base(torch.nn.Module):
             selected_cond_outputs, unselected_cond_outputs = select_closest_cond_frames(
                 frame_idx, cond_outputs, self.max_cond_frames_in_attn
             )
+            non_cond_outputs = output_dict["non_cond_frame_outputs"]
             t_pos_and_prevs = [(0, out) for out in selected_cond_outputs.values()]
             # Add last (self.num_maskmem - 1) frames before current frame for non-conditioning memory
             # the earliest one has t_pos=1 and the latest one has t_pos=self.num_maskmem-1
@@ -664,9 +665,9 @@ class SAM2Base(torch.nn.Module):
                 valid_indices = [] 
                 if frame_idx > 1:  # Ensure we have previous frames to evaluate
                     for i in range(frame_idx - 1, 1, -1):  # Iterate backwards through previous frames
-                        iou_score = output_dict["non_cond_frame_outputs"][i]["best_iou_score"]  # Get mask affinity score
-                        obj_score = output_dict["non_cond_frame_outputs"][i]["object_score_logits"]  # Get object score
-                        kf_score = output_dict["non_cond_frame_outputs"][i]["kf_score"] if "kf_score" in output_dict["non_cond_frame_outputs"][i] else None  # Get motion score if available
+                        iou_score = non_cond_outputs[i]["best_iou_score"]  # Get mask affinity score
+                        obj_score = non_cond_outputs[i]["object_score_logits"]  # Get object score
+                        kf_score = non_cond_outputs[i]["kf_score"] if "kf_score" in non_cond_outputs[i] else None  # Get motion score if available
                         # Check if the scores meet the criteria for being a valid index
                         if iou_score.item() > self.memory_bank_iou_threshold and \
                            obj_score.item() > self.memory_bank_obj_score_threshold and \
@@ -681,7 +682,7 @@ class SAM2Base(torch.nn.Module):
                     idx = t_pos - self.num_maskmem  # Calculate the index for valid indices
                     if idx < -len(valid_indices):  # Skip if index is out of bounds
                         continue
-                    out = output_dict["non_cond_frame_outputs"].get(valid_indices[idx], None)  # Get output for the valid index
+                    out = non_cond_outputs.get(valid_indices[idx], None)  # Get output for the valid index
                     if out is None:  # If not found, check unselected outputs
                         out = unselected_cond_outputs.get(valid_indices[idx], None)
                     t_pos_and_prevs.append((t_pos, out))  # Append the temporal position and output to the list
@@ -710,7 +711,7 @@ class SAM2Base(torch.nn.Module):
                             prev_frame_idx = -(-(frame_idx + 2) // stride) * stride
                             # then seek further among every r-th frames
                             prev_frame_idx = prev_frame_idx + (t_rel - 2) * stride
-                    out = output_dict["non_cond_frame_outputs"].get(prev_frame_idx, None)
+                    out = non_cond_outputs.get(prev_frame_idx, None)
                     if out is None:
                         # If an unselected conditioning frame is among the last (self.num_maskmem - 1)
                         # frames, we still attend to it as if it's a non-conditioning frame.
@@ -763,7 +764,8 @@ class SAM2Base(torch.nn.Module):
                     t = frame_idx + t_diff if track_in_reverse else frame_idx - t_diff
                     if t < 0 or (num_frames is not None and t >= num_frames):
                         break
-                    out = output_dict["non_cond_frame_outputs"].get(
+                    # basically whichever of these two have the frame get that 
+                    out = non_cond_outputs.get(
                         t, unselected_cond_outputs.get(t, None)
                     )
                     if out is not None:

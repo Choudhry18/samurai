@@ -4,6 +4,7 @@ import numpy as np
 import os
 import torch
 import gc
+import argparse
 
 def frame_generator(video_source):
     """Generate frames from a video source."""
@@ -17,20 +18,25 @@ def frame_generator(video_source):
     cap.release()
     return fps
 
-def main():
-    # 1. Initialize model
+def main(args):
+    # Determine video source
+    if args.video:
+        video_source = args.video
+        # if not os.path.exists(video_source):
+        #     print(f"Error: Video file not found at {os.path.abspath(video_source)}")
+        #     return
+    else:
+        video_source = args.camera
+
+    # Initialize model
     predictor = build_sam2_video_predictor_hf("facebook/sam2.1-hiera-base-plus", device="cuda:0")
     
-    # 2. Setup streaming source
-    video_source = ""  # Path to video file
-    # if not os.path.exists(video_source):
-    #     print(f"Error: Video file not found at {os.path.abspath(video_source)}")
-    #     return
+    # Setup streaming source
     frame_gen = frame_generator(video_source)
     
     # Get video properties for output file
     cap = cv2.VideoCapture(video_source)
-    fps = cap.get(cv2.CAP_PROP_FPS)
+    fps = cap.get(cv2.CAP_PROP_FPS) if args.video else 30  # Default to 30 FPS for camera
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     cap.release()
@@ -56,11 +62,9 @@ def main():
     with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
         while True:
             try:
-
                 new_frame = next(frame_gen)
                 frame_idx, object_ids, masks = predictor.propagate_streaming(inference_state, new_frame)
 
-                
                 # Create a copy for visualization
                 output_frame = new_frame.copy()
                 mask_to_vis = {}
@@ -84,7 +88,7 @@ def main():
 
                 for obj_id, mask in mask_to_vis.items():
                     mask_img = np.zeros((height, width, 3), np.uint8)
-                    mask_img[mask] =  color
+                    mask_img[mask] = color
                     img = cv2.addWeighted(output_frame, 1, mask_img, 0.2, 0)
 
                 for obj_id, bbox in bbox_to_vis.items():
@@ -92,7 +96,6 @@ def main():
                     
                 out.write(img)
                     
-                
                 # Exit on 'q' press
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
@@ -110,4 +113,8 @@ def main():
     print(f"Video saved to {os.path.abspath(output_path)}")
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Run SAM2 video predictor on a video file or camera.")
+    parser.add_argument("--video", type=str, default=None, help="Path to the video file. If not provided, the camera will be used.")
+    parser.add_argument("--camera", type=int, default=0, help="Camera index to use (default: 0). Ignored if --video is provided.")
+    args = parser.parse_args()
+    main(args)
