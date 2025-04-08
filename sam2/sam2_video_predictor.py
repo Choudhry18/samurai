@@ -15,7 +15,7 @@ from sam2.modeling.sam2_base import NO_OBJ_SCORE, SAM2Base
 from sam2.utils.misc import concat_points, fill_holes_in_mask_scores, load_video_frames
 import cv2
 import numpy as np
-
+import gc
 class SAM2VideoPredictor(SAM2Base):
     """The predictor class to handle user interactions and manage inference states."""
 
@@ -123,8 +123,8 @@ class SAM2VideoPredictor(SAM2Base):
         inference_state = {}
         inference_state["images"] = images
         inference_state["num_frames"] = 1  # Start with just one frame
-        inference_state["frame_buffer"] = images  # Store processed frames
-        inference_state["original_frames"] = [first_frame]  # Store original frames
+        # inference_state["frame_buffer"] = images  # Store processed frames
+        # inference_state["original_frames"] = [first_frame]  # Store original frames
         inference_state["offload_video_to_cpu"] = offload_video_to_cpu  # Always offload in streaming
         inference_state["offload_state_to_cpu"] = offload_state_to_cpu
         inference_state["video_height"], inference_state["video_width"] = first_frame.shape[:2]
@@ -152,7 +152,6 @@ class SAM2VideoPredictor(SAM2Base):
         }
         inference_state["tracking_has_started"] = False
         inference_state["frames_already_tracked"] = {}
-        inference_state["current_frame_idx"] = 0
         
         # Warm up the visual backbone and cache the image feature on frame 0
         self._get_image_feature(inference_state, frame_idx=0, batch_size=1)
@@ -166,18 +165,17 @@ class SAM2VideoPredictor(SAM2Base):
         new_frame_tensor = self._preprocess_frame(new_frame)
         
         # Add to frame buffers
-        inference_state["original_frames"].append(new_frame)
-        inference_state["frame_buffer"].append(new_frame_tensor)
+        # inference_state["original_frames"].append(new_frame)
+        inference_state["images"] = [new_frame_tensor]
         
         # Update frame count
         inference_state["num_frames"] += 1
-        inference_state["current_frame_idx"] += 1
         
-        # Process the next frame (optional pre-computation)
-        new_frame_idx = inference_state["num_frames"] - 1
+        # # Process the next frame (optional pre-computation)
+        # new_frame_idx = inference_state["num_frames"] - 1
         # self._get_image_feature(inference_state, frame_idx=new_frame_idx, batch_size=1)
         
-        return new_frame_idx
+        return inference_state["num_frames"] - 1
     
     def _preprocess_frame(self, frame):
         """Convert a single frame to the tensor format expected by the model."""
@@ -201,14 +199,14 @@ class SAM2VideoPredictor(SAM2Base):
         if not inference_state["tracking_has_started"]:
             self.propagate_in_video_preflight(inference_state)
         
-
         frame_idx = self.add_next_frame(inference_state, new_frame)
-        
+        self._release_old_frames(inference_state, frame_idx)
+
         # Skip if we've already processed this frame
-        if frame_idx in inference_state["frames_already_tracked"]:
-            # Return existing results for this frame
-            object_ids, masks = self._get_orig_video_res_output(inference_state, frame_idx)
-            return frame_idx, object_ids, masks
+        # if frame_idx in inference_state["frames_already_tracked"]:
+        #     # Return existing results for this frame
+        #     object_ids, masks = self._get_orig_video_res_output(inference_state, frame_idx)
+        #     return frame_idx, object_ids, masks
         
         # Process the new frame - same logic as in propagate_in_video
         current_out, pred_masks = self._run_single_frame_inference(
@@ -220,7 +218,8 @@ class SAM2VideoPredictor(SAM2Base):
             point_inputs=None, 
             mask_inputs=None,
             reverse=False,
-            run_mem_encoder=True
+            run_mem_encoder=True,
+            streaming_mode=True,
         )
 
         inference_state["output_dict"]["non_cond_frame_outputs"][frame_idx] = current_out
@@ -1014,7 +1013,7 @@ class SAM2VideoPredictor(SAM2Base):
         inference_state["tracking_has_started"] = False
         inference_state["frames_already_tracked"].clear()
 
-    def _get_image_feature(self, inference_state, frame_idx, batch_size):
+    def _get_image_feature(self, inference_state, frame_idx, batch_size, streaming_mode=False):
         """Compute the image features on a given frame."""
         print("_get_image_feature")
         # Look up in the cache first
@@ -1024,7 +1023,10 @@ class SAM2VideoPredictor(SAM2Base):
         if backbone_out is None:
             # Cache miss -- we will run inference on a single image
             device = inference_state["device"]
-            image = inference_state["images"][frame_idx].to(device).float().unsqueeze(0)
+            if streaming_mode:
+                image = inference_state["images"][-1].to(device).float().unsqueeze(0)
+            else:
+                image = inference_state["images"][frame_idx].to(device).float().unsqueeze(0)
             backbone_out = self.forward_image(image)
             # Cache the most recent frame's feature (for repeated interactions with
             # a frame; we can use an LRU cache for more frames in the future).
@@ -1060,6 +1062,7 @@ class SAM2VideoPredictor(SAM2Base):
         reverse,
         run_mem_encoder,
         prev_sam_mask_logits=None,
+        streaming_mode=False,
     ):
         """Run tracking on a single frame based on current inputs and previous memory."""
         print("_run_single_frame_inference")
@@ -1070,7 +1073,7 @@ class SAM2VideoPredictor(SAM2Base):
             current_vision_feats,
             current_vision_pos_embeds,
             feat_sizes,
-        ) = self._get_image_feature(inference_state, frame_idx, batch_size)
+        ) = self._get_image_feature(inference_state, frame_idx, batch_size, streaming_mode)
 
         # point and mask should not appear as input simultaneously on the same frame
         assert point_inputs is None or mask_inputs is None
@@ -1320,7 +1323,7 @@ class SAM2VideoPredictor(SAM2Base):
                 obj_output_dict["non_cond_frame_outputs"].pop(t, None)
 
 
-    def _release_old_frames(self, inference_state, frame_idx, max_inference_state_frames, pre_frames, release_images=True):
+    def _release_old_frames(self, inference_state, frame_idx, max_inference_state_frames=8):
         '''
         Clear frames that will no longer be used for inference—typically, max_inference_state_frames is larger than the propagation length.
         :param
@@ -1335,8 +1338,8 @@ class SAM2VideoPredictor(SAM2Base):
         # Get all the frame indices stored in inference_state['output_dict'].
         all_cond_frames_idx = inference_state['output_dict']['cond_frame_outputs'].keys()
         all_non_cond_frames_idx = inference_state['output_dict']['non_cond_frame_outputs'].keys()
-        old_cond_frames_idx = [idx for idx in all_cond_frames_idx if (pre_frames - 1) < idx <= oldest_allowed_idx] 
-        old_non_cond_frames_idx = [idx for idx in all_non_cond_frames_idx if (pre_frames - 1) < idx <= oldest_allowed_idx] 
+        old_cond_frames_idx = [idx for idx in all_cond_frames_idx if idx <= oldest_allowed_idx] 
+        old_non_cond_frames_idx = [idx for idx in all_non_cond_frames_idx if  idx <= oldest_allowed_idx] 
 
         for old_idx in old_non_cond_frames_idx:
             inference_state['output_dict']['non_cond_frame_outputs'].pop(old_idx,None)
@@ -1349,18 +1352,5 @@ class SAM2VideoPredictor(SAM2Base):
             for obj in inference_state['output_dict_per_obj'].keys():
                 inference_state['output_dict_per_obj'][obj]['cond_frame_outputs'].pop(old_idx,None)
 
-        if release_images: 
-            old_image_indices = [idx for idx in inference_state["images_idx"] if (pre_frames - 1) < idx <= oldest_allowed_idx]
-            image_idx_to_remove = []
-            for old_idx in old_image_indices:
-                old_image_idx = inference_state["images_idx"].index(old_idx)  
-                image_idx_to_remove.append(old_image_idx)
 
-            mask = torch.tensor([i for i in range(inference_state["images"].size(0)) if i not in image_idx_to_remove])
-            inference_state["images"] = torch.index_select(inference_state["images"], dim=0, index=mask)
-            inference_state["images_idx"] = [idx for idx in inference_state["images_idx"] if idx not in old_image_indices]
-
-
-            assert len(inference_state["images"]) == len(inference_state["images_idx"])  
-
-        # gc.collect()
+        gc.collect()

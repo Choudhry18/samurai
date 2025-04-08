@@ -22,10 +22,10 @@ def main():
     predictor = build_sam2_video_predictor_hf("facebook/sam2.1-hiera-base-plus", device="cuda:0")
     
     # 2. Setup streaming source
-    video_source = "https://filesamples.com/samples/video/mp4/sample_640x360.mp4"  # Path to video file
-    if not os.path.exists(video_source):
-        print(f"Error: Video file not found at {os.path.abspath(video_source)}")
-        return
+    video_source = ""  # Path to video file
+    # if not os.path.exists(video_source):
+    #     print(f"Error: Video file not found at {os.path.abspath(video_source)}")
+    #     return
     frame_gen = frame_generator(video_source)
     
     # Get video properties for output file
@@ -45,7 +45,7 @@ def main():
     with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
         inference_state = predictor.init_streaming_state(first_frame)
 
-    bbox = (320, 600, 370, 750)  # (x1, y1, x2, y2)
+    bbox = (420, 600, 470, 750)  # (x1, y1, x2, y2)
 
     # Define color for visualization
     color = [(255, 0, 0)]
