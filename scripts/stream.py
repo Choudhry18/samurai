@@ -12,7 +12,9 @@ def get_gpu_memory_usage():
         return torch.cuda.memory_allocated() / 1024 / 1024, torch.cuda.memory_reserved() / 1024 / 1024
     return 0, 0
 
-def log_memory(tag=""):
+def log_memory(tag="", log_mem=False):
+    if not log_mem:
+        return 
     """Log memory usage with an optional tag."""
     allocated, reserved = get_gpu_memory_usage()
     print(f"[{tag}] GPU Memory: {allocated:.2f}MB allocated, {reserved:.2f}MB reserved")
@@ -40,9 +42,9 @@ def main(args):
         video_source = args.camera
 
     # Initialize model
-    log_memory("Before model load")
+    log_memory("Before model load", args.log_mem)
     predictor = build_sam2_video_predictor_hf("facebook/sam2.1-hiera-base-plus", device="cuda:0")
-    log_memory("After model load")
+    log_memory("After model load", args.log_mem)
     
     # Setup streaming source
     frame_gen = frame_generator(video_source)
@@ -84,7 +86,7 @@ def main(args):
                 bbox_to_vis = {}
 
                 if frame_idx % 10 == 0:
-                    log_memory(f"Before propagate_streaming frame {frame_idx}")
+                    log_memory(f"Before propagate_streaming frame {frame_idx}", args.log_mem)
                 # Visualize the masks
                 for obj_id, mask in zip(object_ids, masks):  
                     mask_binary = mask[0].cpu().numpy() > 0
@@ -131,5 +133,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run SAM2 video predictor on a video file or camera.")
     parser.add_argument("--video", type=str, default=None, help="Path to the video file. If not provided, the camera will be used.")
     parser.add_argument("--camera", type=int, default=0, help="Camera index to use (default: 0). Ignored if --video is provided.")
+    parser.add_argument("--log_mem", type=bool, default=False, help="Log GPU memory usage.")
     args = parser.parse_args()
     main(args)

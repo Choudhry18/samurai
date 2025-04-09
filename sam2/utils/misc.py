@@ -5,8 +5,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import os
-import threading
-import time
 import warnings
 from threading import Thread
 
@@ -349,4 +347,3 @@ def concat_points(old_point_inputs, new_points, new_labels):
         labels = torch.cat([old_point_inputs["point_labels"], new_labels], dim=1)
 
     return {"point_coords": points, "point_labels": labels}
-
