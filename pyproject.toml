@@ -26,7 +26,6 @@ dependencies = [
     "pandas",
     "huggingface_hub",
     "loguru",
-    "eva-decord"
 ]
 
 [project.optional-dependencies]
