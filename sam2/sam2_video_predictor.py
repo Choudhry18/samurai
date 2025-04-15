@@ -233,7 +233,7 @@ class SAM2VideoPredictor(SAM2Base):
         # Get the output in original video resolution
         object_ids, video_res_masks = self._get_orig_video_res_output(inference_state, pred_masks)
         if frame_idx % 10 == 0:
-            print(f"frames removed: {self._clear_unused_frames(inference_state, frame_idx)}")
+            self._clear_unused_frames(inference_state, frame_idx)
         return frame_idx, object_ids, video_res_masks
 
     @classmethod
