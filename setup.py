@@ -2,7 +2,7 @@ import os
 from setuptools import find_packages, setup
 
 # Package metadata
-NAME = "samurai-tracking"
+NAME = "samurai"
 VERSION = "0.1.0"
 DESCRIPTION = "SAMURAI: SAM for zero-shot visual tracking with Motion-Aware Memory"
 URL = "https://github.com/yangchris11/samurai"
