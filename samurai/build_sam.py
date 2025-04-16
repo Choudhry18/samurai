@@ -58,7 +58,7 @@ HF_MODEL_ID_TO_FILENAMES = {
         "sam2.1_hiera_small.pt",
     ),
     "facebook/sam2.1-hiera-base-plus": (
-        "samurai/configs/samurai/sam2.1_hiera_b+.yaml",
+        "configs/samurai/sam2.1_hiera_b+.yaml",
         "sam2.1_hiera_base_plus.pt",
     ),
     "facebook/sam2.1-hiera-large": (
