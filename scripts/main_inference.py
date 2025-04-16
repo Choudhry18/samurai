@@ -5,7 +5,7 @@ import os
 import os.path as osp
 import pdb
 import torch
-from sam2.build_sam import build_sam2_video_predictor
+from samurai.build_sam import build_sam2_video_predictor
 from tqdm import tqdm
 
 

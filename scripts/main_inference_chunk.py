@@ -10,7 +10,7 @@ import torch
 from loguru import logger
 from tqdm import tqdm
 
-from sam2.build_sam import build_sam2_video_predictor
+from samurai.build_sam import build_sam2_video_predictor
 
 
 def load_test_video_list(testing_list_path):

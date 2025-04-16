@@ -1,5 +1,5 @@
 import cv2
-from sam2.build_sam import build_sam2_video_predictor_hf
+from samurai.build_sam import build_sam2_video_predictor_hf
 import numpy as np
 import os
 import torch

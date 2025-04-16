@@ -10,7 +10,7 @@ from PIL import Image
 from tqdm import tqdm
 import time
 
-from sam2.utils.misc import _load_img_as_tensor
+from samurai.utils.misc import _load_img_as_tensor
 
 
 class StreamingVideoLoader:
