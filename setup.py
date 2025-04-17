@@ -46,6 +46,7 @@ setup(
     include_package_data=True,
     package_data={
         'samurai': ['checkpoints/download_ckpts.sh'],
+        "samurai": ["configs/**/*.yaml"],
     },
     install_requires=REQUIRED_PACKAGES,
     python_requires=">=3.10.0",

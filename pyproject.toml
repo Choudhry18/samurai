@@ -41,6 +41,9 @@ torchvision = [
   { index = "pytorch-cu118", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 
+[tool.setuptools.package-data]
+"samurai" = ["configs/**/*.yaml"]
+
 [project.optional-dependencies]
 dev = [
     "pytest",
